@@ -2,11 +2,6 @@ import faunadb, { query as q } from 'faunadb';
 import { NextApiRequest, NextApiResponse } from 'next';
 import Pino from 'pino';
 import { assertNonNullable } from '../../utils';
-import { Player } from '../';
-
-interface QueryPlayersResponse {
-  data: Player[];
-}
 
 export interface Payload {
   name: string;
@@ -24,43 +19,42 @@ export default async (req: NextApiRequest, res: NextApiResponse) => {
     req.body as Payload;
 
   // TODO: handle errors in data validation
+  logger.info(
+    `Start post player wit params: ${name} and week: ${week}, ${monday}, ${tuesday} and ${wednesday}, ${thursday}, ${friday}`
+  );
+
+  let data = {
+    name,
+    week: `${week}`,
+    playing: {
+      monday,
+      tuesday,
+      wednesday,
+      thursday,
+      friday,
+    },
+  } as const;
+
   try {
     const client = new faunadb.Client({
       secret: assertNonNullable(process.env.FAUNADB_SECRET),
       keepAlive: false,
-      timeout: 15,
+      timeout: 10,
     });
-    logger.info(
-      `start! Params: ${name} and week: ${week}, ${monday}, ${tuesday} and ${wednesday}, ${thursday}, ${friday}`
-    );
 
-    const data = {
-      name,
-      week: `${week}`,
-      playing: {
-        monday,
-
-        tuesday,
-
-        wednesday,
-
-        thursday,
-
-        friday,
-      },
-    };
-
-    await client.query(
+    const dbRes = await client.query<{ ref: { id: string } }>(
       q.Create(q.Collection('player'), {
         data,
       })
     );
 
-    return res.status(200).json({ error: '', data });
+    return res
+      .status(200)
+      .json({ error: '', data: { ...data, ref: dbRes.ref.id } });
   } catch (error) {
-    logger.error(error, 'Error in morning-footy-subscribe function');
+    logger.error(error, 'Error in morning-footy-post function');
     return res.status(500).json({
-      error: `Unfortunately, there was an error: ${
+      error: `There was an error when joining to play: ${
         error.message || error.toString()
       } 😔`,
     });
